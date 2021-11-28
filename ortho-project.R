@@ -1,7 +1,11 @@
 library(readxl)
 library(jsonlite)
 library(tidyverse)
-setwd("~/GitHub/api222-finalproj")
+library(lubridate)
+library(splitstackshape)
+library(eply)
+
+setwd("~/GitHub/api222-finalproj/api222-finalproj")
 orthoMD510k2020 <- read_excel("orthoMD510k2020.xlsx")
 
 json_enf <- "device-enforcement.json"
@@ -12,16 +16,38 @@ json_510k <- "device-510k.json"
 registrations <- jsonlite::fromJSON(txt = json_510k) %>% 
   as.data.frame()
 
+json_recall <- "device-recall.json"
+recall <- fromJSON(txt = json_recall) %>% 
+  as.data.frame()
+
+recalls <- recall %>% 
+  filter(.$results.k_numbers != 'NULL') %>% 
+  filter(year(.$results.event_date_initiated) > 2019) %>% 
+  mutate(results.k_numbers = as.character(results.k_numbers)) %>% 
+  cSplit(., "results.k_numbers", sep = ",", direction = "long") %>% 
+  mutate(results.k_numbers = str_remove_all(results.k_numbers,"[c\\(\\)]")) %>% 
+  mutate(results.k_numbers = unquote(results.k_numbers)) %>% 
+  apply(.,2,as.character) %>% 
+  as.data.frame()
+
+leftrecalljoin <- left_join(orthoMD510k2020,recalls,
+                        by = c("knumber" = "results.k_numbers"))
+
+innerrecalljoin <- inner_join(orthoMD510k2020,recalls,
+                              by = c("knumber" = "results.k_numbers"))
+
+write.csv(recalls,"recalls.csv")
+write.csv(leftrecalljoin,"recall_join.csv")
+write.csv(innerrecalljoin,"recall_inner.csv")
+
+##Other datasets
+
 json_class <- "device-classification.json"
 classifications <- fromJSON(txt = json_class) %>% 
   as.data.frame()
 
 json_pma <- "device-pma.json"
 pma <- fromJSON(txt = json_pma) %>% 
-  as.data.frame()
-
-json_recall <- "device-recall.json"
-recall <- fromJSON(txt = json_recall) %>% 
   as.data.frame()
 
 json_event01 <- "device-event-01.json"
