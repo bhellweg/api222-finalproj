@@ -101,6 +101,27 @@ registrations <- jsonlite::fromJSON(txt = json_510k) %>%
 registrations2020 <- registrations %>% 
   filter(year(.$results.decision_date) == 2020)
 
+devyr <- function(knum){
+  registrations %>% 
+    filter(results.k_number == knum) %>% 
+    select(results.decision_date) %>% 
+    year()
+}
+registrations %>% 
+  filter(results.k_number == "K112028") %>% 
+  select(results.decision_date) %>% 
+  year()
+devyr("K112028")
+
+registrationjoin <- left_join(orthoMD510,registrations,
+                            by = c("device" = "results.k_number"))%>% 
+  mutate(numpred = apply(.[2:92],1,count_na)) %>% 
+  mutate(pred1yr = )
+
+
+
+
+
 pmarecalls <- recall %>% 
   filter(.$results.pma_numbers != "NULL" & .$results.pma_numbers != "N/A") %>% 
   filter(year(.$results.event_date_initiated) == 2020) %>% 
