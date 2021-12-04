@@ -9,6 +9,8 @@ library(ggplot2)
 
 setwd("~/GitHub/api222-finalproj/api222-finalproj")
 
+## Set up Datasets
+
 count_na <- function(x) sum(!is.na(x))
 
 orthoMD510k2020 <- read_excel("orthoMD510k2020.xlsx") %>% 
@@ -38,28 +40,83 @@ recalls <- recall %>%
   as.data.frame() %>% 
   distinct()
 
-leftrecalljoin <- left_join(orthoMD510,recalls,
-                        by = c("device" = "results.k_numbers"))%>% 
-  mutate(recalled = as.numeric(ifelse(is.na(meta.disclaimer),0,1))) %>% 
-  mutate(numpred = apply(.[2:92],1,count_na)) 
+registrations %>% 
+  filter(results.k_number == "K112028") %>% 
+  select(results.decision_date) 
+devyr("K112028")
 
-innerrecalljoin <- inner_join(orthoMD510,recalls,
-                              by = c("device" = "results.k_numbers"))%>% 
-  mutate(recalled = as.numeric(ifelse(is.na(meta.disclaimer),0,1))) %>% 
-  mutate(numpred = apply(.[2:92],1,count_na)) 
+registrationjoin2 <- left_join(orthoMD510,registrations,
+                               by = c("device" = "results.k_number"))%>% 
+  mutate(numpred = apply(.[2:92],MARGIN = 1,FUN = count_na)) %>% 
+  select(-c(109,110)) %>% 
+  mutate(predyr1 = sapply(predicates1,FUN = devyr)) %>% 
+  mutate(predyr2 = sapply(predicates2,FUN = devyr))%>% 
+  mutate(predyr3 = sapply(predicates3,FUN = devyr))%>% 
+  mutate(predyr4 = sapply(predicates4,FUN = devyr))%>% 
+  mutate(predyr5 = sapply(predicates5,FUN = devyr))%>% 
+  mutate(predyr6 = sapply(predicates6,FUN = devyr))%>% 
+  mutate(predyr7 = sapply(predicates7,FUN = devyr))%>% 
+  mutate(predyr8 = sapply(predicates8,FUN = devyr))%>% 
+  mutate(predyr9 = sapply(predicates9,FUN = devyr))%>% 
+  mutate(predyr10 = sapply(predicates10,FUN = devyr))%>% 
+  mutate(predyr11 = sapply(predicates11,FUN = devyr))%>% 
+  mutate(predyr12 = sapply(predicates12,FUN = devyr))%>% 
+  mutate(predyr13 = sapply(predicates13,FUN = devyr))%>% 
+  mutate(predyr14 = sapply(predicates14,FUN = devyr))%>% 
+  mutate(predyr15 = sapply(predicates15,FUN = devyr))%>% 
+  mutate(predyr16 = sapply(predicates16,FUN = devyr))%>% 
+  mutate(predyr17 = sapply(predicates17,FUN = devyr))%>% 
+  mutate(predyr18 = sapply(predicates18,FUN = devyr))%>% 
+  mutate(predyr19 = sapply(predicates19,FUN = devyr))%>% 
+  mutate(predyr20 = sapply(predicates20,FUN = devyr))%>% 
+  mutate(predyr21 = sapply(predicates21,FUN = devyr))%>% 
+  mutate(predyr22 = sapply(predicates22,FUN = devyr))%>% 
+  mutate(predyr23 = sapply(predicates23,FUN = devyr))%>% 
+  mutate(predyr24 = sapply(predicates24,FUN = devyr))%>% 
+  mutate(predyr25 = sapply(predicates25,FUN = devyr))%>% 
+  mutate(predyr26 = sapply(predicates26,FUN = devyr))%>% 
+  mutate(predyr27 = sapply(predicates27,FUN = devyr)) %>% 
+  mutate(predyr28 = sapply(predicates28,FUN = devyr)) %>% 
+  mutate(predyr29 = sapply(predicates29,FUN = devyr)) %>% 
+  mutate(predyr30 = sapply(predicates30,FUN = devyr)) %>% 
+  mutate(predyr31 = sapply(predicates31,FUN = devyr)) %>% 
+  mutate(predyr32 = sapply(predicates32,FUN = devyr)) 
 
-write.csv(recalls,"recalls.csv")
-write.csv(leftrecalljoin,"recall_join.csv")
-write.csv(innerrecalljoin,"recall_inner.csv")
+asdate1 <- function(x){as.Date(x,origin = origin)}
+meandate1 <- function(x){x %>% unlist() %>%  mean.Date(na.rm = T)}
+
+registrationjoin[124:155] <- registrationjoin[124:155] %>% sapply(.,FUN = asdate1)
+registrationjoin1 <- registrationjoin %>% 
+  mutate(avgdate = registrationjoin[124:155] %>% rowMeans(na.rm = T) %>% as.Date(origin = origin) %>% year()) %>% 
+  select(-c(2:93,95:102,105:107,114:116,119,120,121,124:155)) %>% 
+  filter(numpred >0)
+
+leftrecalljoin <- left_join(registrationjoin1,recalls,
+                            by = c("device" = "results.k_numbers"))%>% 
+  mutate(recalled = as.numeric(ifelse(is.na(meta.disclaimer),0,1))) %>% 
+  select(-c(16:56))
+
+##Conduct Analyses
 
 x <- leftrecalljoin$numpred
 sqrtx <- sqrt(leftrecalljoin$numpred)
 y <- leftrecalljoin$recalled
+date<-leftrecalljoin$avgdate
 
 summary(glm(y~x,family = binomial()))
 summary(glm(y~sqrtx,family = binomial()))
+summary(glm(y~sqrtx+date,family = binomial()))
 
-plot(glm(y~sqrtx))
+recalled <- leftrecalljoin %>% 
+  filter(.$recalled == 0)
+notrecalled <- leftrecalljoin %>% 
+  filter(.$recalled == 1)
+
+mean(recalled$numpred)
+mean(notrecalled$numpred)
+
+
+## Make Visualizations
 
 linecolors <- c("#714C02")
 fillcolors <- c("#9D6C06")
@@ -74,115 +131,7 @@ ggplot(as.data.frame(x,y),
        subtitle = 'Produced for API-222') +
   theme_bw()
 
-recalled <- leftrecalljoin %>% 
-  filter(.$recalled == 0)
-notrecalled <- leftrecalljoin %>% 
-  filter(.$recalled == 1)
+## Write dataset to csv
 
-mean(recalled$numpred)
-mean(notrecalled$numpred)
+write.csv(leftrecalljoin,"orthoproject.csv")
 
-
-
-
-
-
-
-##Other datasets
-
-
-json_enf <- "device-enforcement.json"
-enforcement <- jsonlite::fromJSON(txt = json_enf) %>% 
-  as.data.frame()
-
-json_510k <- "device-510k.json"
-registrations <- jsonlite::fromJSON(txt = json_510k) %>% 
-  as.data.frame()
-registrations2020 <- registrations %>% 
-  filter(year(.$results.decision_date) == 2020)
-
-devyr <- function(knum){
-  registrations %>% 
-    filter(results.k_number == knum) %>% 
-    select(results.decision_date) %>% 
-    year()
-}
-registrations %>% 
-  filter(results.k_number == "K112028") %>% 
-  select(results.decision_date) %>% 
-  year()
-devyr("K112028")
-
-registrationjoin <- left_join(orthoMD510,registrations,
-                            by = c("device" = "results.k_number"))%>% 
-  mutate(numpred = apply(.[2:92],1,count_na)) %>% 
-  mutate(pred1yr = )
-
-
-
-
-
-pmarecalls <- recall %>% 
-  filter(.$results.pma_numbers != "NULL" & .$results.pma_numbers != "N/A") %>% 
-  filter(year(.$results.event_date_initiated) == 2020) %>% 
-  mutate(results.pma_numbers = as.character(results.pma_numbers)) %>% 
-  cSplit(., "results.k_numbers", sep = ",", direction = "long") %>% 
-  mutate(results.pma_numbers = str_remove_all(results.pma_numbers,"[c\\(\\)]")) %>% 
-  mutate(results.pma_numbers = unquote(results.pma_numbers)) %>% 
-  #apply(.,2,as.character) %>% 
-  as.data.frame()
-
-json_class <- "device-classification.json"
-classifications <- fromJSON(txt = json_class) %>% 
-  as.data.frame()
-
-json_pma <- "device-pma.json"
-pma <- fromJSON(txt = json_pma) %>% 
-  as.data.frame()
-pma2020 <- pma %>% 
-  filter(year(.$results.decision_date) > 2019)
-  
-
-json_event01 <- "device-event-01.json"
-json_event02 <- "device-event-02.json"
-json_event03 <- "device-event-03.json"
-json_event04 <- "device-event-04.json"
-json_event05 <- "device-event-05.json"
-json_event06 <- "device-event-06.json"
-json_event07 <- "device-event-07.json"
-json_event08 <- "device-event-08.json"
-json_event09 <- "device-event-09.json"
-json_event10 <- "device-event-10.json"
-json_event11 <- "device-event-11.json"
-json_event12 <- "device-event-12.json"
-json_event13 <- "device-event-13.json"
-json_event14 <- "device-event-14.json"
-json_event15 <- "device-event-15.json"
-json_event16 <- "device-event-16.json"
-json_event17 <- "device-event-17.json"
-
-event01 <- fromJSON(txt = json_event01) %>% as.data.frame()
-event02 <- fromJSON(txt = json_event02) %>% as.data.frame()
-event03 <- fromJSON(txt = json_event03) %>% as.data.frame()
-event04 <- fromJSON(txt = json_event04) %>% as.data.frame()
-event05 <- fromJSON(txt = json_event05) %>% as.data.frame()
-event06 <- fromJSON(txt = json_event06) %>% as.data.frame()
-event07 <- fromJSON(txt = json_event07) %>% as.data.frame()
-event08 <- fromJSON(txt = json_event08) %>% as.data.frame()
-event09 <- fromJSON(txt = json_event09) %>% as.data.frame()
-event10 <- fromJSON(txt = json_event10) %>% as.data.frame()
-event11 <- fromJSON(txt = json_event11) %>% as.data.frame()
-event12 <- fromJSON(txt = json_event12) %>% as.data.frame()
-event13 <- fromJSON(txt = json_event13) %>% as.data.frame()
-event14 <- fromJSON(txt = json_event14) %>% as.data.frame()
-event15 <- fromJSON(txt = json_event15) %>% as.data.frame()
-event16 <- fromJSON(txt = json_event16) %>% as.data.frame()
-event17 <- fromJSON(txt = json_event17) %>% as.data.frame()
-
-events <- rbind(event01,event02,event03,event04,event05,
-                event06,event07,event08,event09,event10,
-                event11,event12,event13)
-events <- events%>% 
-  apply(.,2,as.character) %>% 
-  as.data.frame()
-write.csv(events,"events.csv")
