@@ -2,17 +2,37 @@ library(readxl)
 library(jsonlite)
 library(tidyverse)
 library(lubridate)
-library(splitstackshape)
 library(eply)
 library(glmnet)
 library(ggplot2)
+library(jsonlite)
 
 setwd("~/GitHub/api222-finalproj/api222-finalproj")
 
-## Set up Datasets
+## Set up Functions and Datasets
 
+#Function to count the number of NAs in a dataset
 count_na <- function(x) sum(!is.na(x))
 
+#Function to sort down to a single K number in the registrations dataset
+devyr <- function(knum){
+  registrations %>% 
+    filter(results.k_number == knum) %>% 
+    select(results.decision_date) %>% 
+    year()
+}
+
+#Function to ensure all dates for recalls are properly formatted
+asdate1 <- function(x){
+  as.Date(x,origin = origin)
+}
+
+#Function to show the mean date for all recalls of predicates by device
+meandate1 <- function(x){
+  x %>% unlist() %>%  mean.Date(na.rm = T)
+}
+
+#Load the relevant ortho datasets
 orthoMD510k2020 <- read_excel("orthoMD510k2020.xlsx") %>% 
   mutate(year = 2020)
 orthoMD510k2019 <- read_excel("orthoMD510k2019.xlsx") %>% 
@@ -20,14 +40,22 @@ orthoMD510k2019 <- read_excel("orthoMD510k2019.xlsx") %>%
 orthoMD510k2018 <- read_excel("orthoMD510k2018.xlsx") %>% 
   mutate(year = 2018)
 
+#Merge the datasets
 orthoMD510 <- rbind(orthoMD510k2020,
                     orthoMD510k2019,
                     orthoMD510k2018)
 
+#Load and process the json files for recalls
 json_recall <- "device-recall.json"
 recall <- fromJSON(txt = json_recall) %>% 
   as.data.frame()
 
+#Load and process the 510K dataset
+json_510k <- "device-510k.json"
+registrations <- jsonlite::fromJSON(txt = json_510k) %>% 
+  as.data.frame()
+
+#Produce a dataset identifying recalls issued for all devices, splitting out devices with multiple K numbers into multiple rows
 recalls <- recall %>% 
   filter(.$results.k_numbers != 'NULL') %>% 
   filter(year(.$results.event_date_initiated) > 2017) %>% 
@@ -40,11 +68,13 @@ recalls <- recall %>%
   as.data.frame() %>% 
   distinct()
 
+#Checking that the function works and produces the right decision date based on the K number
 registrations %>% 
   filter(results.k_number == "K112028") %>% 
   select(results.decision_date) 
 devyr("K112028")
 
+#Producing a new dataset showing the recall date (if applicable) for every device by K number, with each predicate mapped out for recall date.
 registrationjoin2 <- left_join(orthoMD510,registrations,
                                by = c("device" = "results.k_number"))%>% 
   mutate(numpred = apply(.[2:92],MARGIN = 1,FUN = count_na)) %>% 
@@ -82,15 +112,20 @@ registrationjoin2 <- left_join(orthoMD510,registrations,
   mutate(predyr31 = sapply(predicates31,FUN = devyr)) %>% 
   mutate(predyr32 = sapply(predicates32,FUN = devyr)) 
 
-asdate1 <- function(x){as.Date(x,origin = origin)}
-meandate1 <- function(x){x %>% unlist() %>%  mean.Date(na.rm = T)}
+#Updating all predicate recall dates to properly show as dates
+registrationjoin[124:155] <- registrationjoin[124:155] %>% 
+  sapply(.,FUN = asdate1)
 
-registrationjoin[124:155] <- registrationjoin[124:155] %>% sapply(.,FUN = asdate1)
+#Adding a column to show the average date of recall by predicate, then simplifying table
 registrationjoin1 <- registrationjoin %>% 
-  mutate(avgdate = registrationjoin[124:155] %>% rowMeans(na.rm = T) %>% as.Date(origin = origin) %>% year()) %>% 
+  mutate(avgdate = registrationjoin[124:155] %>% 
+           rowMeans(na.rm = T) %>% 
+           as.Date(origin = origin) %>% 
+           year()) %>% 
   select(-c(2:93,95:102,105:107,114:116,119,120,121,124:155)) %>% 
   filter(numpred >0)
 
+#Joining the recalled predicates to the recalls dataset to present more information about each recall
 leftrecalljoin <- left_join(registrationjoin1,recalls,
                             by = c("device" = "results.k_numbers"))%>% 
   mutate(recalled = as.numeric(ifelse(is.na(meta.disclaimer),0,1))) %>% 
@@ -98,29 +133,33 @@ leftrecalljoin <- left_join(registrationjoin1,recalls,
 
 ##Conduct Analyses
 
+#Setting basic values
 x <- leftrecalljoin$numpred
 sqrtx <- sqrt(leftrecalljoin$numpred)
 y <- leftrecalljoin$recalled
 date<-leftrecalljoin$avgdate
 
+#Logistic regressions of number of recall status and predicate number
 summary(glm(y~x,family = binomial()))
 summary(glm(y~sqrtx,family = binomial()))
 summary(glm(y~sqrtx+date,family = binomial()))
 
+#Basic calculations for validation of sample means
 recalled <- leftrecalljoin %>% 
   filter(.$recalled == 0)
 notrecalled <- leftrecalljoin %>% 
   filter(.$recalled == 1)
-
 mean(recalled$numpred)
 mean(notrecalled$numpred)
 
 
 ## Make Visualizations
 
+#Setting color standards
 linecolors <- c("#714C02")
 fillcolors <- c("#9D6C06")
 
+#Plotting logistic regression
 ggplot(as.data.frame(x,y),
        aes(x,y))+
   geom_point(position=position_jitter(h=0.1, w=0.1),
@@ -132,6 +171,15 @@ ggplot(as.data.frame(x,y),
   theme_bw()
 
 ## Write dataset to csv
-
 write.csv(leftrecalljoin,"orthoproject.csv")
 
+##Note: if you want to look similarly at PMAs you can use this sort of code instead of lines 59-69
+pmarecalls <- recall %>% 
+  filter(.$results.pma_numbers != "NULL" & .$results.pma_numbers != "N/A") %>% 
+  filter(year(.$results.event_date_initiated) > 2017) %>% 
+  mutate(results.pma_numbers = as.character(results.pma_numbers)) %>% 
+  cSplit(., "results.k_numbers", sep = ",", direction = "long") %>% 
+  mutate(results.pma_numbers = str_remove_all(results.pma_numbers,"[c\\(\\)]")) %>% 
+  mutate(results.pma_numbers = unquote(results.pma_numbers)) %>% 
+  #apply(.,2,as.character) %>% 
+  as.data.frame()
