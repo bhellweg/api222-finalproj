@@ -6,6 +6,7 @@ library(eply)
 library(glmnet)
 library(ggplot2)
 library(jsonlite)
+library(splitstackshape)
 
 setwd("~/GitHub/api222-finalproj/api222-finalproj")
 
@@ -19,7 +20,7 @@ devyr <- function(knum){
   registrations %>% 
     filter(results.k_number == knum) %>% 
     select(results.decision_date) %>% 
-    year()
+    as.character() 
 }
 
 #Function to ensure all dates for recalls are properly formatted
@@ -71,11 +72,13 @@ recalls <- recall %>%
 #Checking that the function works and produces the right decision date based on the K number
 registrations %>% 
   filter(results.k_number == "K112028") %>% 
-  select(results.decision_date) 
+  select(results.decision_date) %>% 
+  as.character() %>% 
+  as.Date()
 devyr("K112028")
 
 #Producing a new dataset showing the recall date (if applicable) for every device by K number, with each predicate mapped out for recall date.
-registrationjoin2 <- left_join(orthoMD510,registrations,
+registrationjoin <- left_join(orthoMD510,registrations,
                                by = c("device" = "results.k_number"))%>% 
   mutate(numpred = apply(.[2:92],MARGIN = 1,FUN = count_na)) %>% 
   select(-c(109,110)) %>% 
@@ -114,10 +117,11 @@ registrationjoin2 <- left_join(orthoMD510,registrations,
 
 #Updating all predicate recall dates to properly show as dates
 registrationjoin[124:155] <- registrationjoin[124:155] %>% 
+  mutate_all(str_replace_all, "character\\(0\\)", "") %>% 
   sapply(.,FUN = asdate1)
 
 #Adding a column to show the average date of recall by predicate, then simplifying table
-registrationjoin1 <- registrationjoin %>% 
+registrationjoin <- registrationjoin %>% 
   mutate(avgdate = registrationjoin[124:155] %>% 
            rowMeans(na.rm = T) %>% 
            as.Date(origin = origin) %>% 
